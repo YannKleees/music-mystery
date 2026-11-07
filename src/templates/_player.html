@@ -1,0 +1,33 @@
+{# Song player for both sources.
+   Spotify tracks: Spotify's embedded player (Spotify no longer gives new apps preview MP3s).
+   Deezer tracks: a play button for the 30-second preview, so title and artist stay hidden.
+   `kind`: "cover" = the cropped play button of the guessing pages,
+           "bar"   = a full-width player on the drag-and-drop ranking pages,
+           "small" = an 80x80 cover on the table ranking pages. #}
+
+{% macro player(track, kind="cover") %}
+{% if track.source == "deezer" %}
+  {% if kind == "bar" %}
+    <audio class="w-100 mm-audio" controls preload="none" src="{{ track.preview_url }}">
+      Your browser cannot play audio.
+    </audio>
+  {% else %}
+    <button type="button" class="mm-play" data-src="{{ track.preview_url }}" aria-label="Play the 30-second preview"
+            style="width:100%; height:100%; border:none; background:#1f2b46; color:#fff;
+                   font-size:{{ '1.4rem' if kind == 'cover' else '2rem' }}; cursor:pointer;">&#9654;</button>
+  {% endif %}
+{% else %}
+  {% if kind == "cover" %}
+    <iframe src="https://open.spotify.com/embed/track/{{ track.id }}?theme=0&view=coverart"
+            width="600" height="600" frameborder="0" style="position:absolute; top:-265px; left:-513px;"
+            allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"></iframe>
+  {% elif kind == "bar" %}
+    <iframe src="https://open.spotify.com/embed/track/{{ track.id }}" width="100%" height="152" frameborder="0"
+            allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"></iframe>
+  {% else %}
+    <iframe src="https://open.spotify.com/embed/track/{{ track.id }}?theme=0&view=coverart"
+            width="80" height="80" frameborder="0" style="border-radius:8px;"
+            allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"></iframe>
+  {% endif %}
+{% endif %}
+{% endmacro %}

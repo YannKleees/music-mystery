@@ -9,8 +9,10 @@ from src.models import User, GuessLog
 from src.routes.auth import get_spotify_client
 from src.routes.quiz_base import (
     quiz_bp, ALL_TRACKS, RANDOM_MUSIC_FACTS, get_buddy_personality_lines,
-    generate_hints, _fetch_playlist_tracks, parse_spotify_playlist_input
+    generate_hints, _fetch_playlist_tracks, parse_spotify_playlist_input,
+    ensure_tracks, refresh
 )
+from src.music import PRESETS, parse_deezer_playlist
 
 
 
@@ -18,7 +20,7 @@ def current_user():
     uid = session.get("user_id")
     if not uid:
         return None
-    return User.query.get(uid)
+    return db.session.get(User, uid)
 
 
 def require_login(f):
@@ -39,18 +41,9 @@ def dashboard():
 
     missed_count = len(user.get_missed_songs())
 
-    # If we have a playlist_id but ALL_TRACKS is empty, auto-fetch now:
-    if session.get('playlist_id') and not ALL_TRACKS:
-        sp = get_spotify_client()
-        if sp:
-            try:
-                total, added = _fetch_playlist_tracks(sp, session['playlist_id'])
-                flash(f"Imported {added} track(s) from your playlist.", "info")
-            except spotipy.exceptions.SpotifyException as e:
-                flash(f"Error auto-fetching playlist: {str(e)}", "danger")
-
-    if not session.get("spotify_token"):
-        session["buddy_message"] = f"Hello, {user.username}! Connect your Spotify account above!"
+    # Songs load when the first game starts (Deezer charts unless another playlist was picked)
+    if not ALL_TRACKS:
+        session["buddy_message"] = f"Hello, {user.username}! Pick a game, or choose a playlist first."
     else:
         lines = get_buddy_personality_lines()
         session["buddy_message"] = lines['start'][0]
@@ -70,8 +63,12 @@ def settings():
         session['difficulty'] = request.form.get('difficulty', 'normal')
         custom_pl = request.form.get('playlist_id', '').strip()
         if custom_pl:
-            parsed_pl = parse_spotify_playlist_input(custom_pl)
-            session['playlist_id'] = parsed_pl
+            if 'spotify' in custom_pl:
+                session['music_source'] = 'spotify'
+                session['playlist_id'] = parse_spotify_playlist_input(custom_pl)
+            else:
+                session['music_source'] = 'deezer'
+                session['deezer_choice'] = parse_deezer_playlist(custom_pl) or custom_pl
             ALL_TRACKS.clear()
         chosen_personality = request.form.get('buddy_personality', 'friendly')
         session['buddy_personality'] = chosen_personality
@@ -194,28 +191,12 @@ def recent_played():
 @quiz_bp.route('/random_version')
 @require_login
 def random_version():
-    sp = get_spotify_client()
-    if not sp:
-        flash("Spotify not connected. Please connect first!", "warning")
+    err = ensure_tracks()
+    if err:
+        flash(err, "warning")
         return redirect(url_for('quiz_bp.dashboard'))
 
-    if not ALL_TRACKS:
-        if not session.get('playlist_id'):
-            flash("No playlist selected. Please import a playlist first.", "warning")
-            return redirect(url_for('quiz_bp.dashboard'))
-        try:
-            total, added = _fetch_playlist_tracks(sp, session['playlist_id'])
-            if not added:
-                flash("No new tracks found (maybe the playlist is empty?).", "warning")
-        except spotipy.exceptions.SpotifyException as e:
-            flash(f"Error fetching playlist: {str(e)}", "danger")
-            return redirect(url_for('quiz_bp.dashboard'))
-
-    if not ALL_TRACKS:
-        flash("No tracks found. Please select or import a valid playlist!", "warning")
-        return redirect(url_for('quiz_bp.dashboard'))
-
-    chosen = random.choice(ALL_TRACKS)
+    chosen = refresh(random.choice(ALL_TRACKS))
     session["current_track_id"] = chosen["id"]
     ctype = random.choice(["artist", "title", "year"])
     session["challenge_type"] = ctype
@@ -335,49 +316,46 @@ def random_feedback():
 @quiz_bp.route('/choose_playlist', methods=['GET', 'POST'])
 @require_login
 def choose_playlist():
+    """Deezer presets or any Deezer playlist (no account needed); Spotify playlists once connected."""
     sp = get_spotify_client()
-    if not sp:
-        flash("Please connect your Spotify account first!", "warning")
-        return redirect(url_for('quiz_bp.dashboard'))
-
     if request.method == 'POST':
-        choice_source = request.form.get('choice_source')
-        if choice_source == 'user':
-            selected_id = request.form.get('playlist_id')
-            if selected_id:
-                session['playlist_id'] = selected_id
-                ALL_TRACKS.clear()
-                flash("Selected your playlist!", "success")
-            else:
+        source = request.form.get('choice_source')
+        if source == 'deezer':
+            choice = (request.form.get('deezer_preset') or '').strip()
+            custom = (request.form.get('deezer_custom') or '').strip()
+            choice = (parse_deezer_playlist(custom) or custom) if custom else choice
+            if not choice:
+                flash("Pick a preset or paste a Deezer playlist link.", "warning")
+                return redirect(url_for('quiz_bp.choose_playlist'))
+            session['music_source'] = 'deezer'
+            session['deezer_choice'] = choice
+        elif source in ('user', 'custom'):
+            if not sp:
+                flash("Please connect your Spotify account first!", "warning")
+                return redirect(url_for('quiz_bp.choose_playlist'))
+            raw = request.form.get('playlist_id') if source == 'user' else request.form.get('custom_playlist_link', '')
+            pid = parse_spotify_playlist_input(raw or '')
+            if not pid:
                 flash("No playlist chosen.", "warning")
-
-        elif choice_source == 'custom':
-            custom_val = request.form.get('custom_playlist_link', '').strip()
-            if custom_val:
-                parsed_id = parse_spotify_playlist_input(custom_val)
-                if parsed_id:
-                    session['playlist_id'] = parsed_id
-                    ALL_TRACKS.clear()
-                    flash("Custom playlist set!", "success")
-                else:
-                    flash("Unable to parse that link or ID!", "danger")
-            else:
-                flash("No custom link provided.", "warning")
-
+                return redirect(url_for('quiz_bp.choose_playlist'))
+            session['music_source'] = 'spotify'
+            session['playlist_id'] = pid
+        ALL_TRACKS.clear()
+        err = ensure_tracks()
+        if err:
+            flash(err, "danger")
+        else:
+            flash(f"Loaded {len(ALL_TRACKS)} songs.", "success")
         return redirect(url_for('quiz_bp.dashboard'))
 
     user_playlists = []
-    try:
-        result = sp.current_user_playlists(limit=50, offset=0)
-        user_playlists = result.get('items', [])
-    except Exception as e:
-        flash(f"Error fetching your playlists: {str(e)}", "danger")
-        return redirect(url_for('quiz_bp.dashboard'))
-
-    return render_template(
-        "choose_playlist.html",
-        user_playlists=user_playlists
-    )
+    if sp:
+        try:
+            user_playlists = sp.current_user_playlists(limit=50, offset=0).get('items', [])
+        except Exception as e:
+            flash(f"Could not fetch your Spotify playlists: {e}", "warning")
+    return render_template("choose_playlist.html", presets=PRESETS, user_playlists=user_playlists,
+                           spotify_connected=bool(sp), current=session.get('playlist_title'))
 
 # Autocomplete for artists
 @quiz_bp.route('/autocomplete/artist')
@@ -409,36 +387,3 @@ def autocomplete_title():
             titles.add(track["title"])
     suggestions = sorted(list(titles), key=lambda x: x.lower())
     return jsonify(suggestions[:10])
-
-###############################################################################
-# DOWNLOAD ROUTE (PASSWORD-PROTECTED)
-###############################################################################
-import os
-from flask import send_file, abort, request
-
-SECRET_DOWNLOAD_PASSWORD = "some_strong_password_here"
-
-@quiz_bp.route("/admin/download_db")
-def download_db():
-    passwd = request.args.get("pw", "")
-    if passwd != SECRET_DOWNLOAD_PASSWORD:
-        abort(403)
-
-    # Because quiz_main.py is physically at /project/src/src/routes,
-    # go two levels up (“../../”) to get back to /project/src,
-    # then into instance/guessing_game.db:
-    db_path = os.path.join(os.path.dirname(__file__), "../../instance/guessing_game.db")
-
-    print("DEBUG => __file__:", __file__)       # Should be something like /opt/render/project/src/src/routes/quiz_main.py
-    print("DEBUG => db_path:", db_path)
-
-    # Optional: confirm it exists
-    if not os.path.isfile(db_path):
-        print("DEBUG => That file path does not exist on the server!")
-        abort(404, "Database file not found")
-
-    return send_file(
-        db_path,
-        as_attachment=True,
-        download_name="guessing_game.db"
-    )

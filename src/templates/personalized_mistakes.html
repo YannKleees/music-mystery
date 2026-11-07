@@ -1,5 +1,6 @@
 {# templates/personalized_mistakes.html #}
 {% extends "layout.html" %}
+{% from "_player.html" import player %}
 {% block content %}
 <h2>Your Missed Songs</h2>
 
@@ -21,13 +22,7 @@
         <td>{{ t.title }}</td>
         <td>{{ t.year }}</td>
         <td>
-          <iframe
-            src="https://open.spotify.com/embed/track/{{ t.id }}"
-            width="200"
-            height="80"
-            frameborder="0"
-            allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture">
-          </iframe>
+          {{ player(t, 'small') }}
         </td>
       </tr>
       {% endfor %}

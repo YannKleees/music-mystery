@@ -8,7 +8,7 @@ from flask import (
 from src.app import db
 from src.models import User, GuessLog
 from src.routes.quiz_base import (
-    quiz_bp, ALL_TRACKS, RANDOM_MUSIC_FACTS,
+    quiz_bp, ALL_TRACKS, RANDOM_MUSIC_FACTS, ensure_tracks, refresh,
     current_user, require_login, get_buddy_personality_lines,
     generate_hints
 )
@@ -247,8 +247,9 @@ def get_accuracy_history(user, limit=5):
 @require_login
 def personalized_version():
     user = current_user()
-    if not ALL_TRACKS:
-        flash("No tracks found. Please select/import a playlist first.", "danger")
+    err = ensure_tracks()
+    if err:
+        flash(err, "warning")
         return redirect(url_for('quiz_bp.dashboard'))
 
     # ELO-based snippet logic
@@ -264,6 +265,7 @@ def personalized_version():
     if not chosen:
         flash("No track for personalization; fallback random.", "warning")
         chosen = random.choice(ALL_TRACKS)
+    refresh(chosen)
 
     ctype = pick_question_type_adaptive(user)
     session["current_track_id"] = chosen["id"]

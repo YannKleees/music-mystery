@@ -2,6 +2,7 @@ from flask import Flask, session
 from flask_sqlalchemy import SQLAlchemy
 import datetime
 import os
+import secrets
 from dotenv import load_dotenv
 
 db = SQLAlchemy()
@@ -9,11 +10,11 @@ db = SQLAlchemy()
 def create_app():
     load_dotenv()
     app = Flask(__name__)
-    # For demo; use a secure random key in production
-    app.secret_key = "ANY_RANDOM_SECRET_FOR_DEVELOPMENT"
+    # Set SECRET_KEY in .env to keep people logged in across restarts; a random key works for a demo
+    app.secret_key = os.getenv("SECRET_KEY") or secrets.token_hex(32)
 
-    # Database config
-    app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///guessing_game.db"
+    # Database config: SQLite file in the instance/ folder unless DATABASE_URL is set
+    app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv("DATABASE_URL", "sqlite:///guessing_game.db")
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
     db.init_app(app)
 
@@ -41,5 +42,9 @@ def create_app():
 
     with app.app_context():
         db.create_all()
+
+    from src import music
+    os.makedirs(app.instance_path, exist_ok=True)
+    music.load_cache(os.path.join(app.instance_path, "years.json"))   # original release years
 
     return app

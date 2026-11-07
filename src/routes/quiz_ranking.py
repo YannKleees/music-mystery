@@ -5,13 +5,13 @@ from flask import (
 )
 from src.app import db
 from src.models import User
-from src.routes.quiz_base import quiz_bp, ALL_TRACKS, get_buddy_personality_lines
+from src.routes.quiz_base import quiz_bp, ALL_TRACKS, get_buddy_personality_lines, ensure_tracks, refresh
 
 def current_user():
     uid = session.get("user_id")
     if not uid:
         return None
-    return User.query.get(uid)
+    return db.session.get(User, uid)
 
 def require_login(f):
     from functools import wraps
@@ -90,8 +90,9 @@ def random_rank():
     """
     Presents a random subset of tracks for ranking.
     """
-    if not ALL_TRACKS:
-        flash("No tracks found. Please select/import a playlist first.", "warning")
+    err = ensure_tracks()
+    if err:
+        flash(err, "warning")
         return redirect(url_for('quiz_bp.dashboard'))
 
     lines = get_buddy_personality_lines()
@@ -104,11 +105,20 @@ def random_rank():
 
     n = random.choice([2, 3, 4][:max_n])
 
+    # Distinct popularity values so the ranking has one right answer; give up after a few
+    # hundred draws instead of looping forever when the list has too few distinct values.
     sample_tracks = []
-    while len(sample_tracks) < n:
+    for _ in range(500):
+        if len(sample_tracks) == n:
+            break
         track = random.choice(ALL_TRACKS)
         if track not in sample_tracks and all(t['popularity'] != track['popularity'] for t in sample_tracks):
             sample_tracks.append(track)
+    if len(sample_tracks) < 2:
+        flash("Not enough different songs to rank. Please pick a bigger playlist.", "warning")
+        return redirect(url_for('quiz_bp.dashboard'))
+    for t in sample_tracks:
+        refresh(t)
 
     session['random_ranking_tracks'] = [t['id'] for t in sample_tracks]
     session['ranking_mode'] = session.get('ranking_mode', 'popularity')  # default
@@ -197,8 +207,9 @@ from src.routes.quiz_personalized import build_personalization_scores, get_decad
 @require_login
 def personalized_rank():
     user = current_user()
-    if not ALL_TRACKS:
-        flash("No tracks available. Please import a playlist first.", "danger")
+    err = ensure_tracks()
+    if err:
+        flash(err, "warning")
         return redirect(url_for('quiz_bp.dashboard'))
 
     lines = get_buddy_personality_lines()
@@ -262,6 +273,8 @@ def personalized_rank():
         flash("Not enough tracks to do a personalized ranking!", "warning")
         return redirect(url_for('quiz_bp.dashboard'))
 
+    for c in chosen:
+        refresh(c)
     session['personalized_ranking_tracks'] = [c['id'] for c in chosen]
 
     return render_template("personalized_rank_drag.html", tracks=chosen, elo=elo)

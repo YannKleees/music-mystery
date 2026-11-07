@@ -27,13 +27,13 @@ SPOTIFY_SCOPES = (
 
 SPOTIFY_CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID")
 SPOTIFY_CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET")
-SPOTIFY_REDIRECT_URI = os.getenv("SPOTIFY_REDIRECT_URI", "https://musicmystery.onrender.com/spotify/callback")
+SPOTIFY_REDIRECT_URI = os.getenv("SPOTIFY_REDIRECT_URI", "http://127.0.0.1:5000/spotify/callback")
 
 def current_user():
     uid = session.get("user_id")
     if not uid:
         return None
-    return User.query.get(uid)
+    return db.session.get(User, uid)
 
 def require_login(f):
     from functools import wraps
@@ -64,7 +64,8 @@ def register():
         if existing:
             flash("Username already taken!", "danger")
             return redirect(url_for('auth_bp.register'))
-        newu = User(username=un, password=pw)
+        newu = User(username=un)
+        newu.set_password(pw)
         db.session.add(newu)
         db.session.commit()
         flash("Registered! Please log in.", "success")
@@ -77,7 +78,7 @@ def login():
         un = request.form.get('username')
         pw = request.form.get('password')
         user = User.query.filter_by(username=un).first()
-        if user and user.password == pw:
+        if user and user.check_password(pw):
             session['user_id'] = user.id
             flash("Login successful!", "success")
             return redirect(url_for('quiz_bp.dashboard'))
@@ -107,8 +108,9 @@ def get_spotify_client():
 @require_login
 def spotify_login():
     if not SPOTIFY_CLIENT_ID or not SPOTIFY_CLIENT_SECRET:
-        flash("Spotify credentials not set!", "danger")
-        return redirect(url_for('quiz_bp.dashboard'))
+        flash("Spotify is not set up on this server (SPOTIFY_CLIENT_ID / SPOTIFY_CLIENT_SECRET in .env). "
+              "Deezer playlists work without it.", "warning")
+        return redirect(url_for('quiz_bp.choose_playlist'))
     params = {
         "client_id": SPOTIFY_CLIENT_ID,
         "response_type": "code",

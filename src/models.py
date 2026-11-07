@@ -1,11 +1,12 @@
 from src.app import db
 import json
 from datetime import datetime
+from werkzeug.security import check_password_hash, generate_password_hash
 
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
-    password = db.Column(db.String(80), nullable=False)
+    password = db.Column(db.String(255), nullable=False)    # salted hash, never the password itself
 
     total_correct = db.Column(db.Integer, default=0)
     total_attempts = db.Column(db.Integer, default=0)
@@ -19,6 +20,12 @@ class User(db.Model):
 
     # For demonstration, store user preferences in JSON (e.g., top-genre).
     preferences_json = db.Column(db.Text, default="{}")
+
+    def set_password(self, raw):
+        self.password = generate_password_hash(raw)
+
+    def check_password(self, raw):
+        return check_password_hash(self.password, raw)
 
     def get_preferences(self):
         """

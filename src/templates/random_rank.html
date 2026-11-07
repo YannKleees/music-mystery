@@ -1,4 +1,5 @@
 {% extends "layout.html" %}
+{% from "_player.html" import player %}
 {% block content %}
 <h2>Random Ranking</h2>
 {% if tracks and tracks|length > 0 %}
@@ -26,12 +27,7 @@
             <strong>{{ t.artist }} - {{ t.title }}</strong><br/>
             <div style="margin-top:8px;">
               <!-- Spotify embedded snippet with coverart (like the guess approach) -->
-              <iframe
-                src="https://open.spotify.com/embed/track/{{ t.id }}?theme=0&view=coverart"
-                width="80" height="80" frameborder="0"
-                allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
-                style="border-radius:8px;">
-              </iframe>
+              {{ player(t, 'small') }}
             </div>
           </td>
           <td style="vertical-align: middle;">

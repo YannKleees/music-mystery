@@ -4,6 +4,7 @@ import time
 from functools import wraps
 
 from flask import Blueprint, session, redirect, url_for, flash
+from src.music import TrackList, load_deezer, refresh  # noqa: F401  (refresh is used by the game modes)
 from src.app import db
 from src.models import User
 
@@ -12,7 +13,7 @@ quiz_bp = Blueprint("quiz_bp", __name__)
 ########################################
 # SHARED GLOBALS
 ########################################
-ALL_TRACKS = []
+ALL_TRACKS = TrackList()        # the logged-in player's songs (see src/music.py)
 
 RANDOM_MUSIC_FACTS = [
     "The world's longest running performance is John Cage's 'Organ²/ASLSP', scheduled to end in 2640!",
@@ -29,7 +30,7 @@ def current_user():
     uid = session.get("user_id")
     if not uid:
         return None
-    return User.query.get(uid)
+    return db.session.get(User, uid)
 
 def require_login(f):
     @wraps(f)
@@ -154,7 +155,8 @@ def _fetch_playlist_tracks(sp, playlist_id, limit=300):
                 "artist": artist_name,
                 "year": year,
                 "preview_url": preview_url,
-                "popularity": popularity
+                "popularity": popularity,
+                "source": "spotify",
             })
             added += 1
             total += 1
@@ -164,6 +166,29 @@ def _fetch_playlist_tracks(sp, playlist_id, limit=300):
             break
 
     return (total, added)
+
+def ensure_tracks():
+    """Load the player's songs if needed. Returns an error message, or None when there are songs."""
+    if ALL_TRACKS:
+        return None
+    if session.get('music_source') == 'spotify':
+        from src.routes.auth import get_spotify_client
+        sp = get_spotify_client()
+        if not sp or not session.get('playlist_id'):
+            return "Connect Spotify and pick one of your playlists, or switch to Deezer on the playlist page."
+        try:
+            _fetch_playlist_tracks(sp, session['playlist_id'])
+        except Exception as e:  # spotipy raises several types (expired token, 404, ...)
+            return f"Could not load the Spotify playlist: {e}"
+    else:
+        try:
+            title, tracks = load_deezer(session.get('deezer_choice', 'charts'))
+        except Exception as e:
+            return f"Could not load songs from Deezer: {e}"
+        session['playlist_title'] = title
+        ALL_TRACKS.extend(tracks)
+    return None if ALL_TRACKS else "That playlist has no playable songs. Please pick another one."
+
 
 ########################################
 # HINT GENERATION

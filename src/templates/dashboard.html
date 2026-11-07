@@ -43,8 +43,8 @@
   </div>
 </div>
 
-{% if session.playlist_id %}
 <hr/>
+{% if session.music_source == 'spotify' and session.playlist_id %}
 <iframe
   style="border-radius:12px"
   src="https://open.spotify.com/embed/playlist/{{ session.playlist_id }}"
@@ -54,9 +54,11 @@
   allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
   loading="lazy">
 </iframe>
+{% elif all_songs|length %}
+<p class="text-muted">Playing {{ all_songs|length }} songs from <strong>{{ session.playlist_title }}</strong>.</p>
 {% else %}
 <p class="text-muted">
-  Choose a playlist to display it here.
+  The first game loads today's Deezer charts. Use <em>Choose a Playlist</em> for other songs or your Spotify playlists.
 </p>
 {% endif %}
 {% endblock %}

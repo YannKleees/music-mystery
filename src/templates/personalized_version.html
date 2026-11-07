@@ -1,4 +1,5 @@
 {% extends "layout.html" %}
+{% from "_player.html" import player %}
 {% block content %}
 <style>
 /* Page background for a more pleasing look */
@@ -138,14 +139,7 @@ body {
             <div class="mx-auto mb-3 snippet-container"
                  style="width:50px; height:50px; position:relative; overflow:hidden;
                         border:2px solid #ccc; border-radius:6px;">
-              <iframe
-                src="https://open.spotify.com/embed/track/{{ song.id }}?theme=0&view=coverart"
-                width="600"
-                height="600"
-                frameborder="0"
-                style="position:absolute; top:-265px; left:-513px;"
-                allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture">
-              </iframe>
+              {{ player(song, 'cover') }}
             </div>
             <p class="text-muted text-center" style="font-size:0.9rem;">
               Press play to hear a snippet. Then guess below!
