@@ -1,0 +1,167 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="container mt-4">
+
+  <h2 class="mb-3">Ranking Version 1</h2>
+  <p>
+    Drag each song from the bottom row (scrollable) into one of the rank boxes.
+    The box labeled <strong>Rank 1</strong> might be your “lowest” or “oldest” item,
+    and <strong>Rank {{ tracks|length }}</strong> might be your “highest” or “newest” — adapt as needed.
+  </p>
+
+  <!-- Arrow Indicator -->
+  <div class="arrow-indicator text-center mb-4">
+    <span>Less Popular</span>
+    <div class="arrow">
+      <div class="line"></div>
+      <div class="arrowhead left"></div>
+      <div class="arrowhead right"></div>
+    </div>
+    <span>More Popular</span>
+  </div>
+
+  <!-- FORM: We'll store the final order in a hidden input -->
+  <form method="POST" action="{{ url_for('quiz_bp.submit_random_rank') }}">
+    <input type="hidden" id="final_order" name="final_order" />
+
+    <!-- TOP ROW: rank boxes -->
+    {% if tracks|length in [2, 3, 4] %}
+    <div class="row text-center mb-4" style="justify-content: center;">
+      {% for i in range(tracks|length, 0, -1) %}
+        <div class="col" style="flex: 0 0 auto; max-width: 25%;">
+          <div class="dropzone card shadow-sm p-3 mb-2"
+               style="min-height: 350px; border:3px dashed #999; cursor:default;"
+               data-rank="{{ i }}">
+            <h5 class="text-muted">Rank {{ i }}</h5>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="text-danger">The number of tracks must be exactly 2, 3, or 4 to rank them.</p>
+    {% endif %}
+
+    <!-- BOTTOM: horizontally scrollable row of songs -->
+    <div class="border p-3 mb-3" style="white-space: nowrap; overflow-x: auto;">
+      {% for t in tracks %}
+      <div class="song-card card d-inline-block m-2 shadow-sm"
+           style="width: 250px; cursor:grab; vertical-align: top;"
+           draggable="true"
+           data-trackid="{{ t.id }}">
+
+        <!-- Song info / text -->
+        <div class="card-body text-center">
+          <h6 class="card-title mb-1">{{ t.title }}</h6>
+          <p class="card-subtitle text-muted">{{ t.artist }}</p>
+        </div>
+
+        <!-- Spotify embed - large enough to show controls fully -->
+        <iframe
+          src="https://open.spotify.com/embed/track/{{ t.id }}"
+          width="100%"
+          height="152"
+          frameborder="0"
+          allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture">
+        </iframe>
+      </div>
+      {% endfor %}
+    </div>
+
+    <!-- SUBMIT BUTTON -->
+    <button type="submit" class="btn btn-primary" onclick="gatherOrder()">
+      Submit Ranking
+    </button>
+  </form>
+
+</div>
+
+<style>
+.arrow-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.arrow {
+  display: flex;
+  align-items: center;
+  position: relative;
+}
+
+.arrow .line {
+  width: 200px;
+  height: 2px;
+  background-color: #000;
+}
+
+.arrow .arrowhead {
+  width: 0;
+  height: 0;
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+}
+
+.arrow .arrowhead.left {
+  border-right: 10px solid #000;
+  margin-right: -1px;
+}
+
+.arrow .arrowhead.right {
+  border-left: 10px solid #000;
+  margin-left: -1px;
+}
+</style>
+
+<script>
+  // DRAG & DROP
+  let draggedItem = null;
+
+  // DRAGSTART => store the card being dragged
+  document.addEventListener('dragstart', (evt) => {
+    if (evt.target.classList.contains('song-card')) {
+      draggedItem = evt.target;
+      evt.dataTransfer.effectAllowed = 'move';
+    }
+  });
+
+  // ALLOW DROP on each .dropzone
+  document.querySelectorAll('.dropzone').forEach(zone => {
+    zone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+    });
+    zone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      if (draggedItem) {
+        // If this zone already has a card, swap them
+        let existingCard = zone.querySelector('.song-card');
+        if (existingCard) {
+          let parent = draggedItem.parentNode;
+          zone.replaceChild(draggedItem, existingCard);
+          parent.appendChild(existingCard);
+        } else {
+          // If no card in the zone, just drop the dragged item
+          zone.appendChild(draggedItem);
+        }
+        draggedItem = null;
+      }
+    });
+  });
+
+  // Before form submit, gather the final order (left to right)
+  function gatherOrder() {
+    let orderArr = [];
+    // The dropzones are in DOM order: rank1, rank2, rank3, ...
+    document.querySelectorAll('.dropzone').forEach(zone => {
+      let card = zone.querySelector('.song-card');
+      if (card) {
+        orderArr.push(card.dataset.trackid);
+      } else {
+        // no card => store empty or handle as you like
+        orderArr.push("");
+      }
+    });
+    document.getElementById('final_order').value = orderArr.reverse().join(',');
+  }
+</script>
+{% endblock %}

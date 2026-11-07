@@ -1,0 +1,21 @@
+{% extends "layout.html" %}
+{% block content %}
+<h2>Settings</h2>
+
+<form method="POST" class="mt-4">
+
+  <div class="mb-3">
+    <label class="form-label">Color Theme</label>
+    <select name="color_theme" class="form-select">
+      <option value="navy" {% if session.color_theme == 'navy' %}selected{% endif %}>Navy</option>
+      <option value="light" {% if session.color_theme == 'light' %}selected{% endif %}>Light</option>
+    </select>
+    <small class="text-muted">
+      Switch between a dark-ish navy theme or a brighter light theme.
+    </small>
+  </div>
+
+
+  <button class="btn btn-primary">Save Settings</button>
+</form>
+{% endblock %}

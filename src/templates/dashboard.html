@@ -1,0 +1,62 @@
+{% extends "layout.html" %}
+{% block content %}
+<h2>Dashboard</h2>
+<p class="text-muted">Welcome, {{ user.username }}! Below are your stats.</p>
+
+<div class="card mt-3">
+  <div class="card-body">
+    <h5 class="card-title">Your Stats</h5>
+    <p class="card-text">
+      Attempts: {{ user.total_attempts }}<br/>
+      Correct: {{ user.total_correct }}<br/>
+      Accuracy: {{ (user.get_accuracy()*100)|round(1) }}%<br/>
+      Missed Songs: {{ missed_count }}
+    </p>
+
+    <hr/>
+    <button class="btn quiz-btn me-2"
+            onclick="window.location='{{ url_for('quiz_bp.random_version') }}'">
+      Play <strong>Guessing 1</strong>
+    </button>
+    <button class="btn quiz-btn me-2"
+            onclick="window.location='{{ url_for('quiz_bp.personalized_version') }}'">
+      Play <strong>Guessing 2</strong>
+    </button>
+    <button class="btn quiz-btn me-2"
+            onclick="window.location='{{ url_for('quiz_bp.random_rank') }}'">
+      Play <strong>Rank Version 1</strong>
+    </button>
+    <button class="btn quiz-btn"
+            onclick="window.location='{{ url_for('quiz_bp.personalized_rank') }}'">
+      Play <strong>Rank Version 2</strong>
+    </button>
+    <br/><br/>
+
+    <button class="btn quiz-btn me-2"
+            onclick="window.location='{{ url_for('quiz_bp.scoreboard') }}'">
+      View Scoreboard
+    </button>
+    <button class="btn quiz-btn"
+        onclick="window.location='{{ url_for('quiz_bp.choose_playlist') }}'">
+        Choose a Playlist
+      </button>
+  </div>
+</div>
+
+{% if session.playlist_id %}
+<hr/>
+<iframe
+  style="border-radius:12px"
+  src="https://open.spotify.com/embed/playlist/{{ session.playlist_id }}"
+  width="100%"
+  height="380"
+  frameborder="0"
+  allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
+  loading="lazy">
+</iframe>
+{% else %}
+<p class="text-muted">
+  Choose a playlist to display it here.
+</p>
+{% endif %}
+{% endblock %}
